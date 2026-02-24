@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bubble Wrap Popper</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #e8f4f8;
+    --bubble: #c8eaf8;
+    --bubble-shine: rgba(255,255,255,0.85);
+    --bubble-shadow: rgba(100,180,220,0.5);
+    --bubble-border: rgba(150,210,240,0.8);
+    --popped: #b8cdd6;
+    --popped-inner: #a8bdc6;
+    --accent: #ff6b9d;
+    --accent2: #ffcc02;
+    --text-dark: #2d4a5a;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    font-family: 'Nunito', sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255,200,230,0.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(160,220,255,0.3) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* TOP BAR */
+  #topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(12px);
+    border-bottom: 2px solid rgba(255,255,255,0.9);
+    z-index: 100;
+    box-shadow: 0 2px 20px rgba(100,180,220,0.15);
+  }
+
+  #logo {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(16px, 4vw, 26px);
+    color: var(--text-dark);
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  #logo span { color: var(--accent); }
+
+  #score-area {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .stat-pill {
+    background: white;
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-weight: 900;
+    font-size: clamp(11px, 2.5vw, 14px);
+    color: var(--text-dark);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .stat-pill .val {
+    color: var(--accent);
+    font-size: 1.1em;
+  }
+
+  #refill-btn {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(11px, 2.5vw, 15px);
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 6px 14px;
+    cursor: pointer;
+    box-shadow: 0 3px 12px rgba(255,107,157,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #refill-btn:hover { transform: scale(1.05); box-shadow: 0 5px 18px rgba(255,107,157,0.5); }
+  #refill-btn:active { transform: scale(0.96); }
+
+  /* COMBO BANNER */
+  #combo-banner {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    background: var(--accent2);
+    color: var(--text-dark);
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(18px, 5vw, 32px);
+    padding: 8px 28px;
+    border-radius: 40px;
+    box-shadow: 0 4px 20px rgba(255,200,0,0.5);
+    z-index: 200;
+    transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #combo-banner.show {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+
+  /* Mode toggle */
+  #mode-toggle {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(11px, 2.2vw, 13px);
+    background: white;
+    border: 2px solid rgba(100,180,220,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    cursor: pointer;
+    color: var(--text-dark);
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #mode-toggle.drag-on { background: #00c9a7; color: white; border-color: #00c9a7; }
+
+  /* GRID */
+  #grid-wrap {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  #bubble-grid {
+    display: grid;
+    gap: 0;
+    width: 100%;
+    height: 100%;
+    padding: 6px;
+  }
+
+  /* BUBBLE */
+  .bubble {
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: transform 0.08s;
+  }
+  .bubble:hover .b-inner:not(.popped) { transform: scale(1.06); }
+
+  .b-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    transition: all 0.12s cubic-bezier(0.34,1.56,0.64,1);
+    background: radial-gradient(circle at 35% 30%, var(--bubble-shine) 0%, var(--bubble) 50%, var(--bubble-shadow) 100%);
+    border: 1.5px solid var(--bubble-border);
+    box-shadow:
+      inset -2px -3px 6px rgba(100,180,220,0.3),
+      inset 2px 2px 6px rgba(255,255,255,0.7),
+      0 2px 8px rgba(100,180,220,0.2);
+  }
+
+  .b-inner::before {
+    content: '';
+    position: absolute;
+    top: 12%; left: 18%;
+    width: 35%; height: 22%;
+    background: rgba(255,255,255,0.75);
+    border-radius: 50%;
+    transform: rotate(-30deg);
+    pointer-events: none;
+  }
+
+  .b-inner.popped {
+    background: radial-gradient(circle, var(--popped-inner) 0%, var(--popped) 100%);
+    border-color: rgba(150,180,190,0.4);
+    box-shadow: inset 1px 1px 4px rgba(0,0,0,0.1);
+    transform: scale(0.82) !important;
+    cursor: default;
+  }
+  .b-inner.popped::before { display: none; }
+
+  /* Pop animation */
+  @keyframes pop-burst {
+    0%   { transform: scale(1.3); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+  .pop-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid rgba(100,200,240,0.7);
+    pointer-events: none;
+    animation: pop-burst 0.35s ease-out forwards;
+  }
+
+  /* Floating score text */
+  @keyframes float-up {
+    0%   { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-60px) scale(0.7); opacity: 0; }
+  }
+  .float-text {
+    position: fixed;
+    font-family: 'Fredoka One', cursive;
+    font-size: 18px;
+    color: var(--accent);
+    pointer-events: none;
+    z-index: 300;
+    animation: float-up 0.7s ease-out forwards;
+    white-space: nowrap;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+
+  /* Shake animation for refill */
+  @keyframes refill-wave {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.15); }
+    70%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+  }
+  .b-inner.refilling {
+    animation: refill-wave 0.4s ease-out forwards;
+  }
+
+  /* Drag indicator */
+  #drag-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: clamp(11px, 2.5vw, 13px);
+    color: rgba(45,74,90,0.5);
+    font-weight: 700;
+    z-index: 50;
+    pointer-events: none;
+    text-align: center;
+    animation: hint-pulse 2s ease-in-out infinite;
+  }
+  @keyframes hint-pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+
+
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">pop<span>!</span>pop</div>
+  <div id="score-area">
+    <div class="stat-pill">🫧 <span class="val" id="pop-count">0</span></div>
+    <div class="stat-pill">🔥 <span class="val" id="combo-count">x1</span></div>
+    <button id="mode-toggle">👆 Tap</button>
+    <button id="refill-btn">✨ Refill All</button>
+  </div>
+</div>
+
+<div id="combo-banner">🔥 COMBO x<span id="combo-val">2</span>!</div>
+
+<div id="grid-wrap">
+  <div id="bubble-grid"></div>
+</div>
+
+<div id="drag-hint">👆 Tap or drag to pop!</div>
+
+<script>
+// ─── Audio Engine ───────────────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let actx = null;
+
+function getAudio() {
+  if (!actx) actx = new AudioCtx();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+function playPop(pitch = 1, volume = 0.4) {
+  try {
+    const ac = getAudio();
+    const now = ac.currentTime;
+
+    // Main pop - short noise burst filtered to sound like a bubble
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.08, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+    }
+
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+
+    // Bandpass filter for that "pop" character
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 800 * pitch;
+    filter.Q.value = 0.8;
+
+    // Second filter layer for richness
+    const filter2 = ac.createBiquadFilter();
+    filter2.type = 'highshelf';
+    filter2.frequency.value = 2000;
+    filter2.gain.value = 6;
+
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    // Subtle click at start
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(200 * pitch, now + 0.04);
+
+    const oscGain = ac.createGain();
+    oscGain.gain.setValueAtTime(0.15, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+    src.connect(filter).connect(filter2).connect(gain).connect(ac.destination);
+    osc.connect(oscGain).connect(ac.destination);
+
+    src.start(now);
+    src.stop(now + 0.12);
+    osc.start(now);
+    osc.stop(now + 0.06);
+  } catch(e) {}
+}
+
+function playCombo(level) {
+  try {
+    const ac = getAudio();
+    const now = ac.currentTime;
+    const notes = [523, 659, 784, 1047, 1319];
+    const freq = notes[Math.min(level-2, notes.length-1)];
+
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.15);
+
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    osc.connect(gain).connect(ac.destination);
+    osc.start(now); osc.stop(now + 0.25);
+  } catch(e) {}
+}
+
+function playRefill() {
+  try {
+    const ac = getAudio();
+    const now = ac.currentTime;
+    const freqs = [261, 329, 392, 523];
+    freqs.forEach((f, i) => {
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      const g = ac.createGain();
+      const t = now + i * 0.07;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.2, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.connect(g).connect(ac.destination);
+      osc.start(t); osc.stop(t + 0.3);
+    });
+  } catch(e) {}
+}
+
+// ─── Grid Setup ─────────────────────────────────────────────────────────────
+const grid = document.getElementById('bubble-grid');
+const wrap = document.getElementById('grid-wrap');
+
+let COLS, ROWS, bubbles = [];
+let totalPopped = 0;
+let combo = 1;
+let comboTimer = null;
+let dragMode = false;
+let isDragging = false;
+
+function calcGrid() {
+  const topbar = document.getElementById('topbar');
+  const topH = topbar.offsetHeight;
+  wrap.style.top = topH + 'px';
+  const w = wrap.clientWidth;
+  const h = window.innerHeight - topH;
+  wrap.style.height = h + 'px';
+  const size = Math.max(32, Math.min(64, Math.floor(Math.min(w, h) / 10)));
+  COLS = Math.floor((w - 12) / size);
+  ROWS = Math.floor((h - 12) / size);
+  return { size, COLS, ROWS };
+}
+
+function buildGrid() {
+  const { size, COLS: C, ROWS: R } = calcGrid();
+  COLS = C; ROWS = R;
+  grid.style.gridTemplateColumns = `repeat(${COLS}, ${size}px)`;
+  grid.style.gridTemplateRows    = `repeat(${ROWS}, ${size}px)`;
+  grid.style.width  = `${COLS * size}px`;
+  grid.style.height = `${ROWS * size}px`;
+  grid.style.margin = 'auto';
+
+  grid.innerHTML = '';
+  bubbles = [];
+
+  for (let i = 0; i < COLS * ROWS; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'bubble';
+    const inner = document.createElement('div');
+    inner.className = 'b-inner';
+    inner.dataset.idx = i;
+    cell.appendChild(inner);
+    grid.appendChild(cell);
+    bubbles.push({ el: inner, popped: false });
+  }
+
+  attachEvents();
+}
+
+function popBubble(idx, x, y) {
+  const b = bubbles[idx];
+  if (!b || b.popped) return;
+  b.popped = true;
+  b.el.classList.add('popped');
+
+  // Pop ring
+  const ring = document.createElement('div');
+  ring.className = 'pop-ring';
+  b.el.parentElement.appendChild(ring);
+  setTimeout(() => ring.remove(), 400);
+
+  // Combo
+  combo++;
+  clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => { combo = 1; }, 600);
+
+  // Pitch varies with combo
+  const pitch = 0.7 + Math.random() * 0.6 + (combo > 5 ? 0.3 : 0);
+  playPop(pitch, 0.35 + Math.min(combo * 0.03, 0.25));
+
+  if (combo >= 3) {
+    playCombo(combo);
+    showCombo(combo);
+  }
+
+  totalPopped++;
+  updateStats();
+  showFloatText(x, y, combo >= 3 ? `+${combo}` : '+1');
+}
+
+function showCombo(n) {
+  const banner = document.getElementById('combo-banner');
+  document.getElementById('combo-val').textContent = n;
+  banner.classList.add('show');
+  clearTimeout(banner._t);
+  banner._t = setTimeout(() => banner.classList.remove('show'), 900);
+}
+
+function showFloatText(x, y, txt) {
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.textContent = txt;
+  el.style.left = (x - 15) + 'px';
+  el.style.top  = (y - 10) + 'px';
+  el.style.color = combo >= 5 ? '#ff6b9d' : combo >= 3 ? '#ffaa00' : '#00aacc';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 700);
+}
+
+function updateStats() {
+  document.getElementById('pop-count').textContent = totalPopped;
+  document.getElementById('combo-count').textContent = 'x' + Math.max(1, combo-1);
+}
+
+function getBubbleFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return -1;
+  const inner = el.closest('.b-inner') || (el.classList.contains('b-inner') ? el : null);
+  if (!inner) return -1;
+  return parseInt(inner.dataset.idx);
+}
+
+function attachEvents() {
+  // Mouse
+  grid.addEventListener('mousedown', e => {
+    isDragging = true;
+    const idx = getBubbleFromPoint(e.clientX, e.clientY);
+    if (idx >= 0) popBubble(idx, e.clientX, e.clientY);
+  });
+  window.addEventListener('mouseup', () => isDragging = false);
+  grid.addEventListener('mousemove', e => {
+    if (!isDragging && !dragMode) return;
+    const idx = getBubbleFromPoint(e.clientX, e.clientY);
+    if (idx >= 0) popBubble(idx, e.clientX, e.clientY);
+  });
+
+  // Touch
+  grid.addEventListener('touchstart', e => {
+    e.preventDefault();
+    isDragging = true;
+    Array.from(e.changedTouches).forEach(t => {
+      const idx = getBubbleFromPoint(t.clientX, t.clientY);
+      if (idx >= 0) popBubble(idx, t.clientX, t.clientY);
+    });
+  }, { passive: false });
+  grid.addEventListener('touchmove', e => {
+    e.preventDefault();
+    Array.from(e.changedTouches).forEach(t => {
+      const idx = getBubbleFromPoint(t.clientX, t.clientY);
+      if (idx >= 0) popBubble(idx, t.clientX, t.clientY);
+    });
+  }, { passive: false });
+  window.addEventListener('touchend', () => isDragging = false);
+}
+
+// Refill
+document.getElementById('refill-btn').addEventListener('click', () => {
+  playRefill();
+  bubbles.forEach((b, i) => {
+    if (b.popped) {
+      setTimeout(() => {
+        b.popped = false;
+        b.el.classList.remove('popped');
+        b.el.classList.add('refilling');
+        setTimeout(() => b.el.classList.remove('refilling'), 450);
+      }, Math.random() * 600);
+    }
+  });
+});
+
+// Drag mode toggle
+const modeBtn = document.getElementById('mode-toggle');
+modeBtn.addEventListener('click', () => {
+  dragMode = !dragMode;
+  modeBtn.textContent = dragMode ? '✋ Drag ON' : '👆 Tap';
+  modeBtn.classList.toggle('drag-on', dragMode);
+});
+
+// Responsive rebuild
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(buildGrid, 200);
+});
+
+// Hide drag hint on first interaction
+document.addEventListener('pointerdown', () => {
+  document.getElementById('drag-hint').style.opacity = '0';
+}, { once: true });
+
+// Init
+buildGrid();
+</script>
+</body>
+</html>
